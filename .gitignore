@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+*.epub
+audio/*.mp3
+sync/*.json
+node_modules/

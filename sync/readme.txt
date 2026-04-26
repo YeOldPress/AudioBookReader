@@ -1,0 +1,1 @@
+This directory is for the synchronization of the audiobook with the text. This will include the json files that are used to synchronize the text with the audio, as well as any scripts or tools that are used to create or manage these synchronization files.s
