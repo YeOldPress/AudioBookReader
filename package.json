@@ -3,17 +3,13 @@
   "private": true,
   "version": "1.0.0",
   "description": "Workspace for ReaderApp and AudioBookFormatMaker",
-  "workspaces": [
-    "ReaderApp",
-    "AudioBookFormatMaker"
-  ],
   "scripts": {
-    "reader:start": "npm --workspace ReaderApp run start --",
-    "reader:electron": "npm --workspace ReaderApp run start:electron",
-    "reader:web": "npm --workspace ReaderApp run start:web --",
-    "reader:build": "npm --workspace ReaderApp run build",
-    "reader:build:mac": "npm --workspace ReaderApp run build:mac",
-    "format-maker:start": "npm --workspace AudioBookFormatMaker run start --",
-    "format-maker:gui": "npm --workspace AudioBookFormatMaker run gui"
+    "reader:start": "npm --prefix ReaderApp run start --",
+    "reader:electron": "npm --prefix ReaderApp run start:electron",
+    "reader:web": "npm --prefix ReaderApp run start:web --",
+    "reader:build": "npm --prefix ReaderApp run build",
+    "reader:build:mac": "npm --prefix ReaderApp run build:mac",
+    "format-maker:start": "npm --prefix AudioBookFormatMaker run start --",
+    "format-maker:gui": "npm --prefix AudioBookFormatMaker run gui"
   }
 }
