@@ -12,6 +12,9 @@ node_modules/
 dist/
 **/dist/
 
+# Root has no dependencies — lockfile lives in each sub-app
+package-lock.json
+
 # npm and package manager logs
 npm-debug.log*
 yarn-debug.log*
