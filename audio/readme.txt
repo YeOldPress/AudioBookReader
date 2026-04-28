@@ -1,1 +1,0 @@
-This directory contains the audiobook mp3 files. Each chapter of the audiobook is stored as a separate mp3 file, named according to the chapter number (e.g., "chapter1.mp3", "chapter2.mp3", etc.). These files are used in conjunction with the synchronization files in the "sync" directory to allow for synchronized reading and listening of the audiobook.s

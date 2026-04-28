@@ -1,5 +1,6 @@
 const express = require("express");
 const multer = require("multer");
+const AdmZip = require("adm-zip");
 const fs = require("fs");
 const fsp = fs.promises;
 const path = require("path");
@@ -118,6 +119,16 @@ app.post("/api/install", upload.array("files", 5000), async (req, res) => {
     const { title, author } = inferTitleAuthor(syncIndex, copied);
     const coverPath = copied.find((p) => /(^|\/)ebook\/.+\.epub$/i.test(p)) || null;
 
+    let coverUrl = null;
+    if (coverPath) {
+      const epubAbs = path.join(sourceDir, coverPath);
+      const bookDir = path.join(STORAGE_DIR, importId);
+      const coverFile = await extractEpubCover(epubAbs, bookDir);
+      if (coverFile) {
+        coverUrl = `/media/${importId}/${coverFile}`;
+      }
+    }
+
     const book = {
       id: importId,
       title,
@@ -125,6 +136,7 @@ app.post("/api/install", upload.array("files", 5000), async (req, res) => {
       createdAt: new Date().toISOString(),
       chapterCount: chapters.length,
       coverPath,
+      coverUrl,
       baseUrl: `/media/${importId}/source`,
       chapters,
     };
@@ -144,7 +156,7 @@ app.post("/api/install", upload.array("files", 5000), async (req, res) => {
 });
 
 app.get("*", (_req, res) => {
-  res.sendFile(path.join(ROOT_DIR, "public", "reader.html"));
+  res.sendFile(path.join(ROOT_DIR, "public", "index.html"));
 });
 
 app.listen(PORT, () => {
@@ -326,4 +338,65 @@ function extractAuthorFromFilenames(copied) {
   }
 
   return null;
+}
+
+async function extractEpubCover(epubAbsPath, destDir) {
+  try {
+    const zip = new AdmZip(epubAbsPath);
+
+    // Step 1: Read META-INF/container.xml to find OPF path
+    const containerEntry = zip.getEntry("META-INF/container.xml");
+    if (!containerEntry) return null;
+
+    const containerXml = containerEntry.getData().toString("utf8");
+    const opfMatch = containerXml.match(/full-path="([^"]+\.opf)"/i);
+    if (!opfMatch) return null;
+
+    const opfPath = opfMatch[1];
+    const opfDir = opfPath.includes("/") ? opfPath.substring(0, opfPath.lastIndexOf("/") + 1) : "";
+
+    const opfEntry = zip.getEntry(opfPath);
+    if (!opfEntry) return null;
+
+    const opfXml = opfEntry.getData().toString("utf8");
+
+    // Step 2: Locate cover image href from OPF
+    let coverHref = null;
+
+    // EPUB3: <item properties="cover-image" href="..."/>
+    const ep3 = opfXml.match(/<item[^>]+properties="cover-image"[^>]+href="([^"]+)"/i)
+      || opfXml.match(/<item[^>]+href="([^"]+)"[^>]+properties="cover-image"/i);
+    if (ep3) coverHref = ep3[1];
+
+    // EPUB2: <meta name="cover" content="id"/> then look up item by id
+    if (!coverHref) {
+      const metaMatch = opfXml.match(/<meta[^>]+name="cover"[^>]+content="([^"]+)"/i)
+        || opfXml.match(/<meta[^>]+content="([^"]+)"[^>]+name="cover"/i);
+      if (metaMatch) {
+        const coverId = metaMatch[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const itemMatch = opfXml.match(new RegExp(`<item[^>]+id="${coverId}"[^>]+href="([^"]+)"`, "i"))
+          || opfXml.match(new RegExp(`<item[^>]+href="([^"]+)"[^>]+id="${coverId}"`, "i"));
+        if (itemMatch) coverHref = itemMatch[1];
+      }
+    }
+
+    if (!coverHref) return null;
+
+    // Step 3: Extract image from ZIP
+    const coverPathInZip = opfDir + coverHref;
+    const coverEntry = zip.getEntry(coverPathInZip);
+    if (!coverEntry) return null;
+
+    const ext = path.extname(coverHref).toLowerCase() || ".jpg";
+    const allowed = [".jpg", ".jpeg", ".png", ".webp", ".gif"];
+    if (!allowed.includes(ext)) return null;
+
+    const destFile = path.join(destDir, `cover${ext}`);
+    await fsp.writeFile(destFile, coverEntry.getData());
+
+    return `cover${ext}`;
+  } catch (err) {
+    console.warn("Could not extract EPUB cover:", err.message);
+    return null;
+  }
 }
