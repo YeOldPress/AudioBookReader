@@ -4,6 +4,11 @@ A synchronized audiobook + ebook reader that highlights text in real time as the
 
 Originally built for *Heaven's River* (Bobiverse #4) by Dennis E. Taylor, but the tooling is general-purpose.
 
+## Apps
+
+- **Player app**: the web/Electron reader (`reader.html`, `main.js`, `launch.py`)
+- **AudioBookFormat Maker app**: standalone formatter in `AudioBookFormatMaker/` for conversion + sync JSON generation
+
 ---
 
 ## Features
@@ -21,19 +26,21 @@ Originally built for *Heaven's River* (Bobiverse #4) by Dennis E. Taylor, but th
 
 ```
 AudioBookReader/
+├── AudioBookFormatMaker/   # Standalone sync/format app
+│   ├── audiobook_format_maker.py
+│   ├── convert_m4b.py
+│   ├── sync_audiobook.py
+│   ├── sync_audiobook_amd_rocm.py
+│   ├── sync_audiobook_amd_rocm_v2.py
+│   ├── inspect_epub.py
+│   └── requirements.txt
+│
 ├── reader.html              # Main reader UI
 ├── audiobook-reader.html    # Alternate reader UI variant
 ├── main.js                  # Electron main process
 ├── preload.js               # Electron preload script
 ├── launch.py                # Browser-mode launcher (simple HTTP server)
 ├── package.json             # Electron app manifest
-│
-├── convert_m4b.py           # Step 1 — Split .m4b into per-chapter MP3s
-├── sync_audiobook.py        # Step 2 — Generate sync JSON (Apple Silicon / CPU)
-├── sync_audiobook_amd_rocm.py    # Step 2 variant — AMD GPU (ROCm)
-├── sync_audiobook_amd_rocm_v2.py # Step 2 variant — AMD GPU v2
-├── inspect_epub.py          # Diagnostic — inspect EPUB chapter structure
-├── patch_interp.py          # Utility — patch Python interpreter path
 │
 ├── audio/                   # Per-chapter MP3 files (output of convert_m4b.py)
 ├── ebook/                   # Source EPUB file(s)
@@ -56,7 +63,7 @@ AudioBookReader/
 ### Python dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install -r AudioBookFormatMaker/requirements.txt
 ```
 
 The default `requirements.txt` targets Apple Silicon via `mlx-whisper`. For other platforms, replace it with `openai-whisper`:
@@ -77,14 +84,43 @@ npm install
 
 ### Step 1 — Convert M4B to MP3 chapters
 
+You can now run conversion and sync from the GUI:
+
 ```bash
-python convert_m4b.py input.m4b --out ./audio
+npm run format-maker:gui
+```
+
+The GUI includes:
+- Whisper model selector (`tiny` → `large`)
+- Hardware backend selector (Apple GPU, AMD GPU, NVIDIA GPU, CPU, Auto)
+- Live progress bar and full log output
+- Convert mode always outputs **mono MP3** (audiobook-friendly)
+- Optional GPU decode acceleration for faster convert, with automatic CPU fallback
+- CD-R fit toggle (700 MB target) with live size estimate while selecting the source file
+
+Node.js launcher is also available:
+
+```bash
+node AudioBookFormatMaker/audiobook_format_maker.js --help
+npm run format-maker -- --help
+```
+
+Example (Node.js sync):
+
+```bash
+npm run format-maker -- sync --audio ./audio --epub ./ebook/book.epub --out ./sync --model medium
+```
+
+CLI usage is still available:
+
+```bash
+python AudioBookFormatMaker/audiobook_format_maker.py convert input.m4b --out ./audio
 
 # With author name embedded in filenames
-python convert_m4b.py input.m4b --out ./audio --author "Dennis E. Taylor"
+python AudioBookFormatMaker/audiobook_format_maker.py convert input.m4b --out ./audio --author "Dennis E. Taylor"
 
 # Just list chapters without converting
-python convert_m4b.py input.m4b --list
+python AudioBookFormatMaker/audiobook_format_maker.py convert input.m4b --list
 ```
 
 | Option | Default | Description |
@@ -98,13 +134,13 @@ python convert_m4b.py input.m4b --list
 ### Step 2 — Generate sync files
 
 ```bash
-python sync_audiobook.py --audio ./audio --epub ./ebook/book.epub --out ./sync
+python AudioBookFormatMaker/audiobook_format_maker.py sync --audio ./audio --epub ./ebook/book.epub --out ./sync
 
 # Process specific tracks only (useful for testing)
-python sync_audiobook.py --audio ./audio --epub ./ebook/book.epub --out ./sync --tracks 3 4 5
+python AudioBookFormatMaker/audiobook_format_maker.py sync --audio ./audio --epub ./ebook/book.epub --out ./sync --tracks 3 4 5
 
 # Use a more accurate Whisper model
-python sync_audiobook.py --audio ./audio --epub ./ebook/book.epub --out ./sync --model small
+python AudioBookFormatMaker/audiobook_format_maker.py sync --audio ./audio --epub ./ebook/book.epub --out ./sync --model small
 ```
 
 | Whisper model | Speed (CPU) | Accuracy |
@@ -117,10 +153,14 @@ python sync_audiobook.py --audio ./audio --epub ./ebook/book.epub --out ./sync -
 
 For AMD GPU acceleration, use `sync_audiobook_amd_rocm_v2.py` instead.
 
+```bash
+python AudioBookFormatMaker/audiobook_format_maker.py sync-rocm-v2 --audio ./audio --epub ./ebook --out ./sync --model medium --device cuda
+```
+
 #### Inspect EPUB structure (optional diagnostic)
 
 ```bash
-python inspect_epub.py ./ebook/OEBPS/Text/
+python AudioBookFormatMaker/audiobook_format_maker.py inspect ./ebook/OEBPS/Text/
 ```
 
 Prints each XHTML chapter file with its heading, character count, and a text preview — useful for verifying the EPUB matches the audio before running the full sync.

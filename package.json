@@ -1,28 +1,19 @@
 {
-  "name": "heavens-river-reader",
+  "name": "audiobook-apps-workspace",
+  "private": true,
   "version": "1.0.0",
-  "description": "Heaven's River — Audiobook Reader",
-  "main": "main.js",
+  "description": "Workspace for ReaderApp and AudioBookFormatMaker",
+  "workspaces": [
+    "ReaderApp",
+    "AudioBookFormatMaker"
+  ],
   "scripts": {
-    "start": "electron .",
-    "build": "electron-builder --mac"
-  },
-  "devDependencies": {
-    "electron": "^30.5.1",
-    "electron-builder": "^24.13.3"
-  },
-  "build": {
-    "appId": "com.heavensriver.reader",
-    "productName": "Heaven's River",
-    "mac": {
-      "category": "public.app-category.entertainment",
-      "target": "dmg"
-    },
-    "files": [
-      "main.js",
-      "reader.html",
-      "sync/**",
-      "audio/**"
-    ]
+    "reader:start": "npm --workspace ReaderApp run start --",
+    "reader:electron": "npm --workspace ReaderApp run start:electron",
+    "reader:web": "npm --workspace ReaderApp run start:web --",
+    "reader:build": "npm --workspace ReaderApp run build",
+    "reader:build:mac": "npm --workspace ReaderApp run build:mac",
+    "format-maker:start": "npm --workspace AudioBookFormatMaker run start --",
+    "format-maker:gui": "npm --workspace AudioBookFormatMaker run gui"
   }
 }

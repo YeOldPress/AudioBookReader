@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AudioBookFormat Maker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="gui.css" />
+</head>
+<body>
+  <div class="bg-layer"></div>
+  <main class="app-shell">
+    <header class="app-header card">
+      <div>
+        <p class="eyebrow">Audio Sync Toolkit</p>
+        <h1>AudioBookFormat Maker</h1>
+        <p class="subtext">Modern formatter UI for convert + Whisper sync workflows.</p>
+      </div>
+      <div class="header-pills">
+        <span class="pill">Apple GPU</span>
+        <span class="pill">AMD GPU</span>
+        <span class="pill">NVIDIA GPU</span>
+      </div>
+    </header>
+
+    <section class="layout-grid">
+      <aside class="panel card">
+        <div class="tabs">
+          <button id="tab-convert" class="tab active">Convert</button>
+          <button id="tab-sync" class="tab">Sync</button>
+        </div>
+
+        <div id="view-convert" class="view active">
+          <div class="field">
+            <label>Input M4B</label>
+            <div class="path-input">
+              <input id="convert-input" type="text" placeholder="/path/to/book.m4b" />
+              <button id="browse-convert-input">Browse</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Output Audio Folder</label>
+            <div class="path-input">
+              <input id="convert-output" type="text" placeholder="/path/to/audio" />
+              <button id="browse-convert-output">Browse</button>
+            </div>
+          </div>
+          <div class="split-2">
+            <div class="field">
+              <label>Author</label>
+              <input id="convert-author" type="text" placeholder="Optional" />
+            </div>
+            <div class="field">
+              <label>Start Track</label>
+              <input id="convert-track" type="number" min="1" value="1" />
+            </div>
+          </div>
+          <div class="split-2">
+            <div class="field">
+              <label>Quality (0-9)</label>
+              <input id="convert-quality" type="number" min="0" max="9" value="2" />
+            </div>
+            <div class="field">
+              <label>Bitrate kbps (optional, overrides quality)</label>
+              <input id="convert-bitrate" type="number" min="32" max="320" value="64" />
+            </div>
+          </div>
+          <div class="split-2">
+            <div class="field checkbox-stack">
+              <label class="checkbox-label"><input id="convert-fit-cdr" type="checkbox" checked /> Fit to CD-R (650 MB)</label>
+              <label class="checkbox-label"><input id="convert-hwaccel" type="checkbox" checked /> Use GPU decode accel (auto fallback CPU)</label>
+            </div>
+            <div class="field checkbox-field">
+              <label class="checkbox-label">
+                <input id="convert-list-only" type="checkbox" />
+                List only (dry run)
+              </label>
+            </div>
+          </div>
+          <p id="convert-estimate" class="estimate">Estimate: select input file.</p>
+          <button id="run-convert" class="cta">Run Convert</button>
+        </div>
+
+        <div id="view-sync" class="view">
+          <div class="field">
+            <label>Audio Folder</label>
+            <div class="path-input">
+              <input id="sync-audio" type="text" placeholder="/path/to/audio" />
+              <button id="browse-sync-audio">Browse</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>EPUB Path (file or folder)</label>
+            <div class="path-input">
+              <input id="sync-epub" type="text" placeholder="/path/to/ebook or book.epub" />
+              <div class="button-cluster">
+                <button id="browse-sync-epub-file">File</button>
+                <button id="browse-sync-epub-dir">Folder</button>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label>Output Sync Folder</label>
+            <div class="path-input">
+              <input id="sync-output" type="text" placeholder="/path/to/sync" />
+              <button id="browse-sync-output">Browse</button>
+            </div>
+          </div>
+          <div class="split-2">
+            <div class="field">
+              <label>Model</label>
+              <select id="sync-model">
+                <option value="tiny">tiny</option>
+                <option value="base" selected>base</option>
+                <option value="small">small</option>
+                <option value="medium">medium</option>
+                <option value="large">large</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Backend</label>
+              <select id="sync-backend">
+                <option value="auto" selected>Auto Detect</option>
+                <option value="apple">Apple GPU (MPS/MLX)</option>
+                <option value="amd">AMD GPU (ROCm)</option>
+                <option value="nvidia">NVIDIA GPU (CUDA)</option>
+                <option value="cpu">CPU</option>
+              </select>
+            </div>
+          </div>
+          <div class="split-2">
+            <div class="field">
+              <label>Tracks (optional)</label>
+              <input id="sync-tracks" type="text" placeholder="e.g. 3 4 5" />
+            </div>
+            <div class="field checkbox-stack">
+              <label class="checkbox-label"><input id="sync-resume" type="checkbox" checked /> Resume existing</label>
+              <label class="checkbox-label"><input id="sync-rocm" type="checkbox" checked /> ROCm compatibility vars</label>
+            </div>
+          </div>
+          <button id="run-sync" class="cta">Run Sync</button>
+        </div>
+      </aside>
+
+      <section class="panel card log-panel">
+        <div class="status-row">
+          <div>
+            <p class="status-label">Status</p>
+            <p id="status-text" class="status-text">Ready</p>
+          </div>
+          <div id="backend-badge" class="backend-badge backend-hidden" aria-live="polite"></div>
+          <button id="stop-task" class="ghost" disabled>Stop</button>
+        </div>
+
+        <div class="progress-wrap">
+          <div class="progress-meta">
+            <span id="progress-count">0 / 0</span>
+            <span id="progress-percent">0%</span>
+          </div>
+          <div class="progress-track">
+            <div id="progress-fill" class="progress-fill"></div>
+          </div>
+        </div>
+
+        <div class="diag-card">
+          <div class="diag-header">
+            <p class="diag-title">GPU Diagnostics</p>
+            <button id="refresh-diag" class="ghost">Refresh</button>
+          </div>
+          <div id="diag-content" class="diag-content">Loading diagnostics...</div>
+        </div>
+
+        <div id="log" class="log"></div>
+      </section>
+    </section>
+  </main>
+
+  <script src="gui.js"></script>
+</body>
+</html>
