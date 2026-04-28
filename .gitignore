@@ -20,6 +20,10 @@ WebApp/storage/books/
 WebApp/storage/tmp/
 WebApp/storage/library.json
 
+# Local test book data
+booktest/
+AudioTest/
+
 # npm and package manager logs
 npm-debug.log*
 yarn-debug.log*

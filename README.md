@@ -1,8 +1,165 @@
 # AudioBook Reader
 
-A synchronized audiobook + ebook reader that highlights text in real time as the audio plays. Built around a Whisper-powered alignment pipeline that maps audio timestamps to EPUB paragraphs, with a dark-themed web UI that works both as a standalone browser app and an Electron desktop app.
+A synchronized audiobook + ebook reader that highlights text in real time as the audio plays. Built around a Whisper-powered alignment pipeline that maps audio timestamps to EPUB paragraphs, with a dark-themed web UI.
 
 Originally built for *Heaven's River* (Bobiverse #4) by Dennis E. Taylor, but the tooling is general-purpose.
+
+---
+
+## Project Structure
+
+```
+AudioBookReader/
+├── WebApp/                      # Hosted web app (Express server + browser UI)
+│   ├── server.js                # Express server (port 8090)
+│   ├── public/index.html        # Single-file reader UI (all HTML/CSS/JS)
+│   ├── scripts/                 # start.js / stop.js / status.js helpers
+│   └── storage/                 # Runtime book storage (gitignored)
+│
+├── ReaderApp/                   # Electron + local web reader
+│   ├── main.js                  # Electron main process
+│   ├── preload.js               # Electron preload script
+│   ├── reader.html              # Reader UI (Electron / local browser)
+│   ├── launch.js                # Node.js local web server launcher
+│   ├── launch.py                # Python local web server launcher
+│   ├── launch.sh / launch.bat   # Shell launchers
+│   └── package.json             # Electron app manifest
+│
+├── AudioBookFormatMaker/        # Conversion + sync pipeline
+│   ├── audiobook_format_maker.py  # CLI entry point
+│   ├── audiobook_format_maker.js  # Node.js CLI wrapper
+│   ├── convert_m4b.py           # M4B → per-chapter MP3
+│   ├── sync_audiobook.py        # Whisper sync (CPU / Apple GPU)
+│   ├── sync_audiobook_amd_rocm.py
+│   ├── sync_audiobook_amd_rocm_v2.py
+│   ├── inspect_epub.py          # EPUB structure diagnostic
+│   ├── gui.html / gui.js        # Electron GUI front-end
+│   ├── gui-main.js              # Electron GUI main process
+│   └── requirements.txt         # Python dependencies
+│
+├── booktest/                    # Local test book files (gitignored)
+└── package.json                 # Root manifest (no deps)
+```
+
+---
+
+## Apps
+
+### WebApp — Hosted web reader
+
+An Express web server that serves the reader UI and manages an uploaded book library. Books are installed via a browser drag-and-drop or folder upload flow and stored in `WebApp/storage/`.
+
+```bash
+cd WebApp
+npm install
+npm start            # foreground on http://localhost:8090
+npm run start:bg     # background daemon
+npm run stop         # stop daemon
+npm run status       # check daemon status
+```
+
+Open `http://localhost:8090` (or `http://<your-ip>:8090` on mobile).
+
+### ReaderApp — Electron / local browser reader
+
+Reads book files directly from the local filesystem (no server required).
+
+```bash
+cd ReaderApp
+npm install
+
+npm start            # launch as Electron desktop app
+npm run start:web    # launch as local web server (http://localhost:8080)
+```
+
+Or without npm:
+
+```bash
+node ReaderApp/launch.js --port 8080
+python ReaderApp/launch.py --port 8080
+```
+
+---
+
+## AudioBook Format Maker
+
+Converts an M4B audiobook and EPUB into the per-chapter MP3 + JSON sync format used by both readers.
+
+### Prerequisites
+
+- Python 3.10+
+- `ffmpeg` / `ffprobe`
+  - macOS: `brew install ffmpeg`
+  - Linux: `sudo apt install ffmpeg`
+
+```bash
+pip install -r AudioBookFormatMaker/requirements.txt
+```
+
+> The default `requirements.txt` targets Apple Silicon (`mlx-whisper`). For other platforms:
+> ```bash
+> pip install openai-whisper rapidfuzz beautifulsoup4 lxml tqdm
+> ```
+
+### Step 1 — Convert M4B to MP3 chapters
+
+```bash
+python AudioBookFormatMaker/audiobook_format_maker.py convert input.m4b --out ./audio
+python AudioBookFormatMaker/audiobook_format_maker.py convert input.m4b --out ./audio --author "Dennis E. Taylor"
+python AudioBookFormatMaker/audiobook_format_maker.py convert input.m4b --list   # preview chapters only
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--out DIR` | *(required)* | Output directory for MP3 files |
+| `--author NAME` | — | Author name embedded in filenames |
+| `--start-track N` | `1` | Starting track number |
+| `--quality 0–9` | `2` | MP3 VBR quality (0 = best) |
+
+### Step 2 — Generate sync files
+
+```bash
+python AudioBookFormatMaker/audiobook_format_maker.py sync \
+  --audio ./audio --epub ./ebook/book.epub --out ./sync
+
+# Specific tracks only
+python AudioBookFormatMaker/audiobook_format_maker.py sync \
+  --audio ./audio --epub ./ebook/book.epub --out ./sync --tracks 3 4 5
+
+# AMD GPU (ROCm)
+python AudioBookFormatMaker/audiobook_format_maker.py sync-rocm-v2 \
+  --audio ./audio --epub ./ebook --out ./sync --model medium --device cuda
+```
+
+| Whisper model | Speed | Accuracy |
+|---|---|---|
+| `tiny` | fastest | Low |
+| `base` | fast | Good *(default)* |
+| `small` | moderate | Better |
+| `medium` | slow | High |
+| `large` | GPU recommended | Best |
+
+### Inspect EPUB structure
+
+```bash
+python AudioBookFormatMaker/audiobook_format_maker.py inspect ./ebook/OEBPS/Text/
+```
+
+---
+
+## How the Sync Works
+
+1. `convert_m4b.py` reads chapter markers from the M4B with `ffprobe` and exports each chapter as a mono MP3 via `ffmpeg`.
+2. `sync_audiobook.py` transcribes each MP3 with Whisper (word-level timestamps), then uses fuzzy matching (`rapidfuzz`) to align each segment to the corresponding EPUB paragraph.
+3. The output is one JSON file per chapter in `sync/`, each containing `{ start, end, text, tag, ... }` entries.
+4. The reader UI loads these JSON files at runtime and highlights the active paragraph as `audio.currentTime` advances.
+
+---
+
+## License
+
+MIT
+
 
 ## Apps
 
