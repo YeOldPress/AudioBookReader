@@ -12,8 +12,13 @@ node_modules/
 dist/
 **/dist/
 
-# Root has no dependencies — lockfile lives in each sub-app
-package-lock.json
+# Root has no dependencies — lockfile lives in each app directory
+/package-lock.json
+
+# Web app runtime data (uploaded book files)
+WebApp/storage/books/
+WebApp/storage/tmp/
+WebApp/storage/library.json
 
 # npm and package manager logs
 npm-debug.log*

@@ -4,6 +4,12 @@
   "version": "1.0.0",
   "description": "Workspace for ReaderApp and AudioBookFormatMaker",
   "scripts": {
+    "webapp:start": "npm --prefix WebApp run start",
+    "webapp:start:bg": "npm --prefix WebApp run start:bg",
+    "webapp:stop": "npm --prefix WebApp run stop",
+    "webapp:status": "npm --prefix WebApp run status",
+    "webapp:restart": "npm --prefix WebApp run restart",
+    "webapp:dev": "npm --prefix WebApp run dev",
     "reader:start": "npm --prefix ReaderApp run start --",
     "reader:electron": "npm --prefix ReaderApp run start:electron",
     "reader:web": "npm --prefix ReaderApp run start:web --",

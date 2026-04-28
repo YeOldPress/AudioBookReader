@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Audiobook Web App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Manrope:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="ambient"></div>
+
+    <header class="topbar">
+      <div>
+        <h1>Cloud Audiobook Shelf</h1>
+        <p>Install a book from a mounted disc folder and stream it from your server.</p>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel install-panel">
+        <h2>Install Book</h2>
+        <p class="muted">
+          Desktop: choose the mounted disc folder. Mobile: select files manually from storage.
+        </p>
+
+        <label class="file-btn">
+          Select Book Folder (Desktop)
+          <input id="folderInput" type="file" webkitdirectory directory multiple />
+        </label>
+
+        <label class="file-btn alt">
+          Select Files (Mobile Fallback)
+          <input id="fileInput" type="file" multiple />
+        </label>
+
+        <button id="installBtn" class="cta">Install to Server</button>
+        <p id="installStatus" class="status"></p>
+      </section>
+
+      <section class="panel library-panel">
+        <div class="panel-head">
+          <h2>Installed Library</h2>
+          <button id="refreshBtn" class="ghost">Refresh</button>
+        </div>
+
+        <div id="booksGrid" class="books-grid"></div>
+      </section>
+
+      <section class="panel player-panel">
+        <h2 id="playerTitle">Select a book</h2>
+        <p id="playerMeta" class="muted"></p>
+
+        <audio id="audio" controls preload="metadata"></audio>
+
+        <div id="chapterList" class="chapter-list"></div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
