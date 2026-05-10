@@ -1,0 +1,13 @@
+{
+  "name": "audiobook-format-maker",
+  "version": "1.0.0",
+  "description": "AudioBookFormat Maker tools and GUI",
+  "main": "audiobook_format_maker.js",
+  "scripts": {
+    "start": "node audiobook_format_maker.js",
+    "gui": "electron gui-main.js"
+  },
+  "devDependencies": {
+    "electron": "^30.5.1"
+  }
+}

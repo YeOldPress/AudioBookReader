@@ -1,0 +1,21 @@
+{
+  "name": "audiobook-web-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hosted audiobook web app with browser upload install flow",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "start:bg": "node scripts/start.js",
+    "stop": "node scripts/stop.js",
+    "status": "node scripts/status.js",
+    "restart": "npm run stop && npm run start:bg",
+    "dev": "node server.js",
+    "make:appimagebundle": "bash scripts/make-appimagebundle.sh"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1"
+  }
+}

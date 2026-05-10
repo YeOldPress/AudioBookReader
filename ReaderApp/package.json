@@ -1,0 +1,45 @@
+{
+  "name": "heavens-river-reader",
+  "version": "1.0.0",
+  "description": "Heaven's River Reader app",
+  "author": {
+    "name": "Randall",
+    "email": "sirrandall@yeold.press"
+  },
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:electron": "electron .",
+    "start:web": "node launch.js",
+    "build": "electron-builder --linux",
+    "build:mac": "electron-builder --mac"
+  },
+  "devDependencies": {
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.heavensriver.reader",
+    "productName": "Heaven's River Reader",
+    "files": [
+      "main.js",
+      "preload.js",
+      "reader.html",
+      "audiobook-reader.html",
+      "launch.js",
+      "launch.sh",
+      "launch.bat",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "AudioVideo"
+    },
+    "mac": {
+      "category": "public.app-category.entertainment",
+      "target": "dmg"
+    }
+  }
+}
