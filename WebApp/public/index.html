@@ -1479,6 +1479,7 @@ async function loadChapter(idx, play) {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     S.syncMap = normalizeSyncMapForDisplay(data.sync_map ?? []);
+    S.syncMap = repairSyncTimelineIfNeeded(S.syncMap, data.duration, data.whisper_segments);
     updateCurrentBookMetaFromSyncMap(S.syncMap);
     renderText(S.syncMap);
   } catch (err) {
@@ -1999,6 +2000,95 @@ function normalizeSyncMapForDisplay(syncMap) {
   }
 
   return merged;
+}
+
+function repairSyncTimelineIfNeeded(syncMap, durationRaw, segmentsRaw) {
+  const map = Array.isArray(syncMap) ? syncMap.map((p) => ({ ...p })) : [];
+  if (map.length < 2) return map;
+
+  const duration = Number(durationRaw);
+  if (!Number.isFinite(duration) || duration <= 0) return map;
+
+  const starts = map.map((p) => Number(p.start)).filter((v) => Number.isFinite(v));
+  if (starts.length < 2) return map;
+
+  let regressions = 0;
+  for (let i = 1; i < starts.length; i += 1) {
+    if (starts[i] + 0.01 < starts[i - 1]) regressions += 1;
+  }
+
+  const first = starts[0];
+  const last = starts[starts.length - 1];
+  const coverage = Math.max(0, last - first);
+  const gaps = [];
+  const spans = [];
+  for (let i = 0; i < map.length; i += 1) {
+    const s = Number(map[i].start);
+    const e = Number(map[i].end);
+    if (Number.isFinite(s) && Number.isFinite(e) && e >= s) {
+      spans.push(e - s);
+    }
+    if (i > 0) {
+      const prev = Number(map[i - 1].start);
+      if (Number.isFinite(prev) && Number.isFinite(s)) {
+        gaps.push(Math.max(0, s - prev));
+      }
+    }
+  }
+  const maxGap = gaps.length ? Math.max(...gaps) : 0;
+  const longSpanCount = spans.filter((v) => v > 45).length;
+  const clearlyBad =
+    first > Math.max(25, duration * 0.2)
+    || coverage < duration * 0.35
+    || regressions > Math.max(2, Math.floor(starts.length * 0.1))
+    || maxGap > Math.max(80, duration * 0.22)
+    || longSpanCount > Math.max(4, Math.floor(map.length * 0.12));
+
+  if (!clearlyBad) return map;
+
+  const segments = Array.isArray(segmentsRaw) ? segmentsRaw : [];
+  const usableSegs = segments
+    .map((s) => ({ start: Number(s?.start), end: Number(s?.end) }))
+    .filter((s) => Number.isFinite(s.start) && Number.isFinite(s.end) && s.end >= s.start);
+
+  if (usableSegs.length >= 4) {
+    const firstSegText = String(segments[0]?.text || '').trim().toLowerCase();
+    const firstParaText = String(map[0]?.text || '').trim().toLowerCase();
+    const firstSegLooksLikeTitle = /^\d+\.?\s*[a-z].{0,80}$/i.test(firstSegText);
+    const firstParaContainsSeg = firstSegText && firstParaText && firstParaText.includes(firstSegText);
+    const baseSegOffset = firstSegLooksLikeTitle && !firstParaContainsSeg ? 1 : 0;
+    const segPool = usableSegs.slice(baseSegOffset);
+    const usablePool = segPool.length >= 4 ? segPool : usableSegs;
+
+    const segLastEnd = Math.max(duration, usableSegs[usableSegs.length - 1].end || duration);
+    for (let i = 0; i < map.length; i += 1) {
+      const ratio = map.length === 1 ? 0 : i / (map.length - 1);
+      const segIdx = Math.min(usablePool.length - 1, Math.floor(ratio * (usablePool.length - 1)));
+      const seg = usablePool[segIdx];
+      map[i].start = seg.start;
+      map[i].end = Math.max(seg.end, seg.start);
+    }
+    // Clamp and monotonic safety pass.
+    let run = 0;
+    for (let i = 0; i < map.length; i += 1) {
+      map[i].start = Math.max(run, Math.min(map[i].start, segLastEnd));
+      map[i].end = Math.max(map[i].start, Math.min(map[i].end, segLastEnd));
+      run = map[i].start;
+    }
+    return map;
+  }
+
+  // Fallback: spread paragraph starts across full chapter duration.
+  const total = map.length;
+  for (let i = 0; i < total; i += 1) {
+    const start = total === 1 ? 0 : (i / (total - 1)) * Math.max(0, duration - 0.25);
+    const nextStart = total === 1
+      ? duration
+      : ((i + 1) / (total - 1)) * Math.max(0, duration - 0.25);
+    map[i].start = start;
+    map[i].end = Math.max(start, Math.min(duration, nextStart));
+  }
+  return map;
 }
 
 function normalizeComparableText(s) {

@@ -10,7 +10,8 @@
     "stop": "node scripts/stop.js",
     "status": "node scripts/status.js",
     "restart": "npm run stop && npm run start:bg",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "make:appimagebundle": "bash scripts/make-appimagebundle.sh"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",

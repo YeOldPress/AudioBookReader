@@ -56,6 +56,7 @@ npm start            # foreground on http://localhost:8090
 npm run start:bg     # background daemon
 npm run stop         # stop daemon
 npm run status       # check daemon status
+npm run make:appimagebundle  # build Linux AppImage into WebApp/dist/
 ```
 
 Open `http://localhost:8090` (or `http://<your-ip>:8090` on mobile).

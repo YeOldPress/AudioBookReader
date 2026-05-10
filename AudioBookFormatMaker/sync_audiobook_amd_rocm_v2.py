@@ -268,6 +268,11 @@ def word_to_num(s: str):
     return WORD_TO_NUM.get(s)
 
 
+def is_ignored_audio_file(path: Path) -> bool:
+    """Ignore hidden/system sidecar files (for example macOS AppleDouble "._*")."""
+    return path.name.startswith(".") or path.stem.startswith("._")
+
+
 def parse_audio_filename(name: str) -> dict:
     """
     Parse an audio filename like:
@@ -277,16 +282,32 @@ def parse_audio_filename(name: str) -> dict:
     kind ∈ {'cred', 'part', 'ch', 'other'}
     """
     base = Path(name).stem
-    parts = base.split(" - ", 2)
-    try:
-        track = int(parts[0])
-    except (ValueError, IndexError):
-        track = 0
-    desc = parts[2].strip() if len(parts) > 2 else base
+    if base.startswith("._"):
+        base = base[2:]
 
-    if re.search(r"opening credits", desc, re.I):
+    track = 0
+    desc = base
+
+    # Accept both "01 - Chapter ..." and "01 - Author - Chapter ..." styles.
+    m = re.match(r"^\s*(\d+)\s*-\s*(.+)$", base)
+    if m:
+        track = int(m.group(1))
+        desc = m.group(2).strip()
+
+    if " - " in desc:
+        first, rest = desc.split(" - ", 1)
+        if (
+            re.search(r"\b(chapter|part)\b", rest, re.I)
+            or re.match(r"^\d+[\.)]?\s", rest)
+            or "cred" in normalize(rest)
+        ):
+            desc = rest.strip()
+
+    desc_norm = normalize(desc)
+
+    if "opening" in desc_norm and "cred" in desc_norm:
         return {"track": track, "kind": "cred", "title": "Opening Credits", "part": 0, "ch": None}
-    if re.search(r"end credits", desc, re.I):
+    if "end" in desc_norm and "cred" in desc_norm:
         return {"track": track, "kind": "cred", "title": "End Credits", "part": 0, "ch": None}
 
     pm = re.search(r"\bpart\s+([\w-]+)", desc, re.I)
@@ -300,6 +321,19 @@ def parse_audio_filename(name: str) -> dict:
         # Tracks 37+ are Part 2 (Part Two header is track 37, so chapters start at 38)
         part = 2 if track >= 38 else 1
         return {"track": track, "kind": "ch", "title": desc, "part": part, "ch": ch_num}
+
+    # Also support titles that start with a chapter number, for example
+    # "12. Bob Version 2.0" or "12) Bob Version 2.0".
+    lead_num = re.match(r"^\s*(\d{1,3})[\.)]?(?:\s+|$)", desc)
+    if lead_num:
+        part = 2 if track >= 38 else 1
+        return {
+            "track": track,
+            "kind": "ch",
+            "title": desc,
+            "part": part,
+            "ch": int(lead_num.group(1)),
+        }
 
     return {"track": track, "kind": "other", "title": desc, "part": 0, "ch": None}
 
@@ -363,6 +397,12 @@ def normalize(text: str) -> str:
     # Collapse whitespace
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def is_word_timestamp_kernel_error(exc: Exception) -> bool:
+    """Detect GPU kernel failures triggered while computing word timestamps."""
+    msg = str(exc).lower()
+    return "dtw_kernel" in msg or "word_timestamps" in msg
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -532,6 +572,75 @@ def interpolate_stuck_timestamps(sync_map: list[dict], duration: float) -> list[
             running_max = p["start"]
 
     return result
+
+
+def prepend_chapter_title_paragraph(paragraphs: list[dict], meta: dict) -> list[dict]:
+    """Insert a synthetic chapter-title paragraph so narrated titles can align at chapter start."""
+    title = str(meta.get("title") or "").strip()
+    if not title:
+        return paragraphs
+
+    title_norm = normalize(title)
+    if paragraphs:
+        first_text = str(paragraphs[0].get("text") or "")
+        first_norm = normalize(first_text)
+        if title_norm and (title_norm in first_norm or first_norm in title_norm):
+            return paragraphs
+
+    epub_file = paragraphs[0].get("epub_file", "") if paragraphs else ""
+    title_row = {"epub_file": epub_file, "tag": "h2", "text": title}
+    return [title_row, *paragraphs]
+
+
+def repair_sync_timeline_if_needed(sync_map: list[dict], duration: float) -> tuple[list[dict], bool]:
+    """
+    Repair obviously bad timelines that collapse large chunks of chapter text
+    into narrow time windows.
+    """
+    n = len(sync_map)
+    if n < 3 or duration <= 0:
+        return sync_map, False
+
+    starts = [float(p.get("start", 0)) for p in sync_map]
+    ends = [float(p.get("end", 0)) for p in sync_map]
+    scores = [float(p.get("match_score", 0)) for p in sync_map]
+
+    coverage = max(starts) - min(starts)
+    max_gap = max((starts[i] - starts[i - 1]) for i in range(1, n))
+    longest_span = max(max(0.0, ends[i] - starts[i]) for i in range(n))
+    low_ratio = sum(1 for s in scores if s < 0.35) / max(1, n)
+
+    suspicious = (
+        coverage < duration * 0.60
+        or max_gap > max(80.0, duration * 0.22)
+        or longest_span > max(60.0, duration * 0.12)
+        or low_ratio > 0.75
+    )
+    if not suspicious:
+        return sync_map, False
+
+    # Redistribute timestamps proportionally by text length to cover full duration.
+    weights = []
+    for row in sync_map:
+        text = normalize(str(row.get("text") or ""))
+        wc = len(text.split())
+        weights.append(max(6, wc))
+
+    total = sum(weights)
+    if total <= 0:
+        return sync_map, False
+
+    repaired = [dict(r) for r in sync_map]
+    running = 0.0
+    for i, row in enumerate(repaired):
+        w = weights[i]
+        start = duration * (running / total)
+        running += w
+        end = duration * (running / total)
+        row["start"] = round(start, 3)
+        row["end"] = round(max(start, end), 3)
+
+    return repaired, True
 
 
 
@@ -730,7 +839,7 @@ def process_chapter(item: dict, transcribe_fn, out_dir: Path) -> dict | None:
     """
     Transcribe one audio file and align it to its epub paragraphs.
     Saves a JSON file to out_dir and returns a summary dict.
-    transcribe_fn: callable(audio_path_str) → Whisper result dict
+    transcribe_fn: callable(audio_path_str, use_word_timestamps=True) → Whisper result dict
     """
     audio_path = item["audio"]
     epub_paths = item["epub_paths"]
@@ -745,12 +854,20 @@ def process_chapter(item: dict, transcribe_fn, out_dir: Path) -> dict | None:
     for ep in sorted(epub_paths, key=lambda p: p.name):
         all_paragraphs.extend(extract_paragraphs(ep))
 
+    all_paragraphs = prepend_chapter_title_paragraph(all_paragraphs, meta)
+
     if not all_paragraphs:
         print("  SKIP — no epub paragraphs found")
         return None
 
     print(f"  Transcribing with word timestamps… ({len(all_paragraphs)} paragraphs to align)")
-    result = transcribe_fn(str(audio_path))
+    try:
+        result = transcribe_fn(str(audio_path), use_word_timestamps=True)
+    except Exception as e:
+        if not is_word_timestamp_kernel_error(e):
+            raise
+        print("  WARNING: word timestamp kernel failed; retrying without word timestamps")
+        result = transcribe_fn(str(audio_path), use_word_timestamps=False)
 
     # Flatten word timestamps
     words    = extract_words(result)
@@ -771,6 +888,10 @@ def process_chapter(item: dict, transcribe_fn, out_dir: Path) -> dict | None:
             [{"word": s["text"], "start": s["start"], "end": s["end"]} for s in segments],
             all_paragraphs,
         )
+
+    sync_map, repaired = repair_sync_timeline_if_needed(sync_map, duration)
+    if repaired:
+        print("  WARNING: timeline looked low-confidence; applied proportional timing repair")
 
     # Score summary
     if sync_map:
@@ -846,7 +967,12 @@ def main():
     # ── Find audio files ──────────────────────────────────────────────────────
     audio_exts   = ("*.mp3", "*.m4a", "*.m4b", "*.flac", "*.ogg", "*.wav")
     audio_files  = sorted(
-        [p for ext in audio_exts for p in audio_dir.glob(ext)],
+        [
+            p
+            for ext in audio_exts
+            for p in audio_dir.glob(ext)
+            if not is_ignored_audio_file(p)
+        ],
         key=lambda p: p.name,
     )
     if not audio_files:
@@ -899,10 +1025,14 @@ def main():
         repo = MLX_MODELS.get(args.model, f"mlx-community/whisper-{args.model}-mlx")
         print(f"\nUsing mlx-whisper  [{repo}]  (Apple Silicon — fastest)")
         print("First run will download model weights (~150 MB for base).")
-        transcribe_fn = lambda p: mlx_whisper.transcribe(
-            p, path_or_hf_repo=repo, language="en", verbose=False,
-            word_timestamps=True,
-        )
+        def transcribe_fn(p: str, use_word_timestamps: bool = True):
+            return mlx_whisper.transcribe(
+                p,
+                path_or_hf_repo=repo,
+                language="en",
+                verbose=False,
+                word_timestamps=use_word_timestamps,
+            )
     else:
         import torch
 
@@ -968,13 +1098,14 @@ def main():
         print(f"\nLoading openai-whisper '{args.model}' on {device}…")
         _model = whisper.load_model(args.model, device=device)
 
-        transcribe_fn = lambda p: _model.transcribe(
-            p,
-            language="en",
-            verbose=False,
-            word_timestamps=True,
-            fp16=(device == "cuda"),
-        )
+        def transcribe_fn(p: str, use_word_timestamps: bool = True):
+            return _model.transcribe(
+                p,
+                language="en",
+                verbose=False,
+                word_timestamps=use_word_timestamps,
+                fp16=(device == "cuda"),
+            )
     print("Model ready.\n")
 
     # ── Process chapters ──────────────────────────────────────────────────────
